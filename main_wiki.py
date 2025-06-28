@@ -6,6 +6,11 @@ import pandas as pd
 from cosine_similarity import cosine_similarity
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from gensim.models import Word2Vec
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
 
 titles = [
     "Artificial intelligence",
@@ -82,7 +87,43 @@ df_sim = pd.DataFrame(similarity_table, index=titles, columns=titles)
 print("\n=== Cosine Similarity Matrix ===")
 print(df_sim.round(3))
 
-plt.figure(figsize=(10, 8))
-sns.heatmap(df_sim, annot=True, cmap="YlGnBu", fmt=".2f")
-plt.title("Document Similarity (Cosine TF-IDF)")
+def document_vector(tokens, model):
+    vectors = [model.wv[word] for word in tokens if word in model.wv]
+    if vectors:
+        return np.mean(vectors, axis=0)
+    else:
+        return np.zeros(model.vector_size)
+
+w2v_model = Word2Vec(sentences=documents, vector_size=100, window=5, min_count=1)
+X = np.array([document_vector(doc, w2v_model) for doc in documents])
+y = [1, 0, 1, 1, 0]
+
+clf = LogisticRegression()
+clf.fit(X, y)
+print(classification_report(y, clf.predict(X)))
+
+# TF-IDF (sparse)
+df_tfidf_matrix = pd.DataFrame(tfidf_matrix).fillna(0)
+pca_tfidf = PCA(n_components=2)
+tfidf_reduced = pca_tfidf.fit_transform(df_tfidf_matrix)
+
+# Word2Vec (dense)
+pca_w2v = PCA(n_components=2)
+w2v_reduced = pca_w2v.fit_transform(X)
+
+# Plot both side by side
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+for i, label in enumerate(successful_titles):
+    axes[0].scatter(*tfidf_reduced[i], color='blue')
+    axes[0].text(*tfidf_reduced[i], label, fontsize=9)
+    axes[1].scatter(*w2v_reduced[i], color='green')
+    axes[1].text(*w2v_reduced[i], label, fontsize=9)
+
+axes[0].set_title("TF-IDF (Sparse)")
+axes[1].set_title("Word2Vec (Dense)")
+plt.tight_layout()
 plt.show()
+
+X_3d = X[:, :3]
+np.save("w2v_vectors_3d.npy", X_3d)
+np.save("titles.npy", np.array(successful_titles))
